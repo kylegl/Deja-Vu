@@ -51,269 +51,366 @@ constexpr auto CVAR_HAS_UPGRADED_COLORS = "cl_dejavu_has_upgraded_colors";
 constexpr auto CVAR_KEYBIND_MAIN_GUI = "cl_dejavu_keybind_main_gui";
 constexpr auto CVAR_KEYBIND_QUICK_NOTE = "cl_dejavu_keybind_quick_note";
 
-#define PLAYLISTS \
-X(ANY, -1) \
-X(Duel, 1) \
-X(Doubles, 2) \
-X(Standard, 3) \
-X(Chaos, 4) \
-X(PrivateMatch, 6) \
-X(OfflineSeason, 7) \
-X(OfflineSplitscreen, 8) \
-X(Training, 9) \
-X(RankedDuel, 10) \
-X(RankedDoubles, 11) \
-X(RankedSoloStandard, 12) \
-X(RankedStandard, 13) \
-X(MutatorMashup, 14) \
-X(SnowDay, 15) \
-X(RocketLabsOld, 16) \
-X(Hoops, 17) \
-X(Rumble, 18) \
-X(Workshop, 19) \
-X(TrainingEditor, 20) \
-X(CustomTraining, 21) \
-X(Tournament, 22) \
-X(Dropshot, 23) \
-X(LocalMatch, 24) \
-X(ExternalMatchRanked, 26) \
-X(RankedHoops, 27) \
-X(RankedRumble, 28) \
-X(RankedDropshot, 29) \
-X(RankedSnowDay, 30) \
-X(GhostHunt, 31) \
-X(BeachBall, 32) \
-X(SpikeRush, 33) \
-X(TournamentMatchAutomatic, 34) \
-X(RocketLabs, 35) \
-X(DropshotRumble, 37) \
-X(Heatseeker, 38) \
-X(BoomerBall, 41) \
-X(HeatseekerDoubles, 43) \
-X(WinterBreakaway, 44) \
-X(Gridiron, 46) \
-X(SuperCube, 47) \
-X(TacticalRumble, 48) \
-X(SpringLoaded, 49) \
-X(SpeedDemon, 50) \
-X(RumbleBM, 52) \
-X(Knockout, 54) \
-X(Thirdwheel, 55)
+#define PLAYLISTS                 \
+  X(ANY, -1)                      \
+  X(Duel, 1)                      \
+  X(Doubles, 2)                   \
+  X(Standard, 3)                  \
+  X(Chaos, 4)                     \
+  X(PrivateMatch, 6)              \
+  X(OfflineSeason, 7)             \
+  X(OfflineSplitscreen, 8)        \
+  X(Training, 9)                  \
+  X(RankedDuel, 10)               \
+  X(RankedDoubles, 11)            \
+  X(RankedSoloStandard, 12)       \
+  X(RankedStandard, 13)           \
+  X(MutatorMashup, 14)            \
+  X(SnowDay, 15)                  \
+  X(RocketLabsOld, 16)            \
+  X(Hoops, 17)                    \
+  X(Rumble, 18)                   \
+  X(Workshop, 19)                 \
+  X(TrainingEditor, 20)           \
+  X(CustomTraining, 21)           \
+  X(Tournament, 22)               \
+  X(Dropshot, 23)                 \
+  X(LocalMatch, 24)               \
+  X(ExternalMatchRanked, 26)      \
+  X(RankedHoops, 27)              \
+  X(RankedRumble, 28)             \
+  X(RankedDropshot, 29)           \
+  X(RankedSnowDay, 30)            \
+  X(GhostHunt, 31)                \
+  X(BeachBall, 32)                \
+  X(SpikeRush, 33)                \
+  X(TournamentMatchAutomatic, 34) \
+  X(RocketLabs, 35)               \
+  X(DropshotRumble, 37)           \
+  X(Heatseeker, 38)               \
+  X(BoomerBall, 41)               \
+  X(HeatseekerDoubles, 43)        \
+  X(WinterBreakaway, 44)          \
+  X(Gridiron, 46)                 \
+  X(SuperCube, 47)                \
+  X(TacticalRumble, 48)           \
+  X(SpringLoaded, 49)             \
+  X(SpeedDemon, 50)               \
+  X(RumbleBM, 52)                 \
+  X(Knockout, 54)                 \
+  X(Thirdwheel, 55)
 
 #define X(playlist, id) playlist = id,
 enum class PlaylistID
 {
-	PLAYLISTS
+  PLAYLISTS
 };
 #undef X
 
-#define X(playlist, id) { PlaylistID::playlist, #playlist },
-static std::map<PlaylistID, std::string> PlaylistNames
+#define X(playlist, id) {PlaylistID::playlist, #playlist},
+static std::map<PlaylistID, std::string> PlaylistNames{
+    PLAYLISTS};
+#undef X
+
+struct PlaylistFilter
 {
-	PLAYLISTS
-};
-#undef X
-
-struct PlaylistFilter {
-	std::string name;
-	int playlistID;
+  std::string name;
+  int playlistID;
 };
 
-enum class Side {
-	Same,
-	Other,
+enum class Side
+{
+  Same,
+  Other,
 };
 
-struct Record {
-	int wins;
-	int losses;
+struct Record
+{
+  int wins;
+  int losses;
 };
 
-enum TEAM : unsigned char {
-	TEAM_NOT_SET = (unsigned char)-1,
-	TEAM_BLUE = 0,
-	TEAM_ORANGE = 1,
+enum TEAM : unsigned char
+{
+  TEAM_NOT_SET = (unsigned char)-1,
+  TEAM_BLUE = 0,
+  TEAM_ORANGE = 1,
 };
 
-
-struct Rect {
-	int X, Y, Width, Height;
+struct Rect
+{
+  int X, Y, Width, Height;
 };
 
-struct RenderData {
-	std::string id;
-	std::string name;
-	int metCount;
-	Record record;
-	Record allPlaylistsRecord;
-	std::string note;
-};
-
-inline void to_json(json& j, const Record& record) {
-	j = json{ {"wins", record.wins}, { "losses", record.losses } };
+inline void to_json(json &j, const Record &record)
+{
+  j = json{{"wins", record.wins}, {"losses", record.losses}};
 }
 
-inline void from_json(const json& j, Record& record) {
-	j.at("wins").get_to(record.wins);
-	j.at("losses").get_to(record.losses);
+inline void from_json(const json &j, Record &record)
+{
+  j.at("wins").get_to(record.wins);
+  j.at("losses").get_to(record.losses);
+}
+
+struct PlayerStats
+{
+  int goals = 0;
+  int assists = 0;
+  int shots = 0;
+  int saves = 0;
+  int epicSaves = 0;
+  int clears = 0;
+  int demos = 0;
+  int centerBalls = 0;
+  int hatTricks = 0;
+  int playmakers = 0;
+  int saviors = 0;
+};
+
+inline void to_json(json &j, const PlayerStats &stats)
+{
+  j = json{
+      {"goals", stats.goals},
+      {"assists", stats.assists},
+      {"shots", stats.shots},
+      {"saves", stats.saves},
+      {"epicSaves", stats.epicSaves},
+      {"clears", stats.clears},
+      {"demos", stats.demos},
+      {"centerBalls", stats.centerBalls},
+      {"hatTricks", stats.hatTricks},
+      {"playmakers", stats.playmakers},
+      {"saviors", stats.saviors}};
+}
+
+inline void from_json(const json &j, PlayerStats &stats)
+{
+  j.at("goals").get_to(stats.goals);
+  j.at("assists").get_to(stats.assists);
+  j.at("shots").get_to(stats.shots);
+  j.at("saves").get_to(stats.saves);
+  if (j.contains("epicSaves"))
+    j.at("epicSaves").get_to(stats.epicSaves);
+  j.at("clears").get_to(stats.clears);
+  j.at("demos").get_to(stats.demos);
+  j.at("centerBalls").get_to(stats.centerBalls);
+  j.at("hatTricks").get_to(stats.hatTricks);
+  j.at("playmakers").get_to(stats.playmakers);
+  j.at("saviors").get_to(stats.saviors);
+}
+
+struct PlayerPlaylistData
+{
+  Record withRecord;
+  Record againstRecord;
+  PlayerStats stats;
+};
+
+inline void to_json(json &j, const PlayerPlaylistData &data)
+{
+  j = json{
+      {"withRecord", data.withRecord},
+      {"againstRecord", data.againstRecord},
+      {"stats", data.stats}};
+}
+
+inline void from_json(const json &j, PlayerPlaylistData &data)
+{
+  j.at("withRecord").get_to(data.withRecord);
+  j.at("againstRecord").get_to(data.againstRecord);
+  j.at("stats").get_to(data.stats);
+}
+
+struct PlayerData
+{
+  std::string name;
+  int metCount = 0;
+  float offenseRatio = 0.5f;
+  float defenseRatio = 0.5f;
+  std::string note;
+  std::map<int, PlayerPlaylistData> playlistData;
+};
+
+inline void to_json(json &j, const PlayerData &data)
+{
+  j = json{
+      {"name", data.name},
+      {"metCount", data.metCount},
+      {"offenseRatio", data.offenseRatio},
+      {"defenseRatio", data.defenseRatio},
+      {"note", data.note},
+      {"playlistData", data.playlistData}};
+}
+
+inline void from_json(const json &j, PlayerData &data)
+{
+  j.at("name").get_to(data.name);
+  j.at("metCount").get_to(data.metCount);
+  j.at("offenseRatio").get_to(data.offenseRatio);
+  j.at("defenseRatio").get_to(data.defenseRatio);
+  if (j.contains("note"))
+    j.at("note").get_to(data.note);
+  j.at("playlistData").get_to(data.playlistData);
 }
 
 class DejaVu : public BakkesMod::Plugin::BakkesModPlugin, public BakkesMod::Plugin::PluginWindow
 {
 public:
-	DejaVu() : mmrWrapper(MMRWrapper(NULL)) {}
+  DejaVu() : mmrWrapper(MMRWrapper(NULL)) {}
 
-	virtual void onLoad() override;
-	virtual void onUnload() override;
+  virtual void onLoad() override;
+  virtual void onUnload() override;
 
-	void HandlePlayerAdded(std::string eventName);
-	void HandlePlayerRemoved(std::string eventName);
-	void HandleGameStart(std::string eventName);
-	void HandleWinnerSet(std::string eventName);
-	void HandleForfeitChanged(std::string eventName);
-	void HandleGameTimeUpdate(std::string eventName);
-	void GameOver();
-	void HandleGameLeave(std::string eventName);
-	void RenderDrawable(CanvasWrapper canvas);
-	void OpenScoreboard(std::string eventName);
-	void CloseScoreboard(std::string eventName);
-	void LaunchQuickNoteModal();
+  void HandlePlayerAdded(std::string eventName);
+  void HandlePlayerRemoved(std::string eventName);
+  void HandleGameStart(std::string eventName);
+  void HandleWinnerSet(std::string eventName);
+  void HandleForfeitChanged(std::string eventName);
+  void HandleGameTimeUpdate(std::string eventName);
+  void OnStatEvent(ServerWrapper caller, void *params, std::string eventName);
+  void GameOver();
+  void HandleGameLeave(std::string eventName);
+  void RenderDrawable(CanvasWrapper canvas);
+  void OpenScoreboard(std::string eventName);
+  void CloseScoreboard(std::string eventName);
+  void LaunchQuickNoteModal();
 
 #pragma region GUI
 
-	void Render() override;
-	void RenderEditNoteModal();
-	std::string GetMenuName() override;
-	std::string GetMenuTitle() override;
-	void SetImGuiContext(uintptr_t ctx) override;
-	bool ShouldBlockInput() override;
-	bool IsActiveOverlay() override;
-	void OnOpen() override;
-	void OnClose() override;
-	void OpenMenu();
-	void CloseMenu();
-	void ToggleMenu();
+  void Render() override;
+  void RenderEditNoteModal();
+  void ExportData();
+  std::string GetMenuName() override;
+  std::string GetMenuTitle() override;
+  void SetImGuiContext(uintptr_t ctx) override;
+  bool ShouldBlockInput() override;
+  bool IsActiveOverlay() override;
+  void OnOpen() override;
+  void OnClose() override;
+  void OpenMenu();
+  void CloseMenu();
+  void ToggleMenu();
 
 private:
-	bool isWindowOpen = false;
-	bool shouldBlockInput = false;
-	std::string menuTitle = "Deja Vu";
-	bool openQuickNote = false;
-	std::string playersNoteToEdit = "";
+  bool isWindowOpen = false;
+  bool shouldBlockInput = false;
+  std::string menuTitle = "Deja Vu";
+  bool openQuickNote = false;
+  std::string playersNoteToEdit = "";
 
 #pragma endregion GUI
 
 private:
-
 #pragma region cvars
-	CVar2WayBinding<bool> enabled =                CVar2WayBinding<bool>(CVAR_ENABLED, true, "Enables plugin");
-	CVar2WayBinding<bool> trackOpponents =         CVar2WayBinding<bool>(CVAR_TRACK_OPPONENTS, true, "Track players if opponents");
-	CVar2WayBinding<bool> trackTeammates =         CVar2WayBinding<bool>(CVAR_TRACK_TEAMMATES, true, "Track players if teammates");
-	CVar2WayBinding<bool> trackGrouped =           CVar2WayBinding<bool>(CVAR_TRACK_GROUPED, true, "Track players if in party");
-	CVar2WayBinding<bool> enabledVisuals =         CVar2WayBinding<bool>(CVAR_VISUALS, true, "Enables visuals");
-	CVar2WayBinding<bool> toggleWithScoreboard =   CVar2WayBinding<bool>(CVAR_TOGGLE_WITH_SCOREBOARD, false, "Toggle with scoreboard (instead of always on)");
-	CVar2WayBinding<bool> showNotes =              CVar2WayBinding<bool>(CVAR_SHOW_PLAYER_NOTES, false, "Show player notes in the visuals");
-	CVar2WayBinding<bool> enabledDebug =           CVar2WayBinding<bool>(CVAR_DEBUG, false, "Enables debug view. Useful when changing visual settings");
-	CVar2WayBinding<bool> enabledLog =             CVar2WayBinding<bool>(CVAR_LOG, false, "Enables logging");
-	CVar2WayBinding<bool> showMetCount =           CVar2WayBinding<bool>(CVAR_SHOW_MET_COUNT, true, "Show the met count");
-	CVar2WayBinding<bool> showRecord =             CVar2WayBinding<bool>(CVAR_SHOW_RECORD, false, "Show the record");
-	CVar2WayBinding<bool> showAllPlaylistsRecord = CVar2WayBinding<bool>(CVAR_SHOW_ALL_PLAYLISTS_RECORD, false, "Show record over all playlists");
-	CVar2WayBinding<float> scale =                 CVar2WayBinding<float>(CVAR_SCALE, 1.0f, "Scale of visuals", true, true, 0.0f, true, 4.0f);
-	CVar2WayBinding<float> alpha =                 CVar2WayBinding<float>(CVAR_ALPHA, 0.75f, "Alpha of visuals", true, true, 0.0f, true, 1.0f);
-	CVar2WayBinding<float> xPos =                  CVar2WayBinding<float>(CVAR_XPOS, 0.0f, "X position of visuals", true, true, 0.0f, true, 1.0f);
-	CVar2WayBinding<float> yPos =                  CVar2WayBinding<float>(CVAR_YPOS, 1.0f, "Y position of visuals", true, true, 0.0f, true, 1.0f);
-	CVar2WayBinding<float> width =                 CVar2WayBinding<float>(CVAR_WIDTH, 0.0f, "Width of visuals", true, true, 0.0f, true, 1.0f);
+  CVar2WayBinding<bool> enabled = CVar2WayBinding<bool>(CVAR_ENABLED, true, "Enables plugin");
+  CVar2WayBinding<bool> trackOpponents = CVar2WayBinding<bool>(CVAR_TRACK_OPPONENTS, true, "Track players if opponents");
+  CVar2WayBinding<bool> trackTeammates = CVar2WayBinding<bool>(CVAR_TRACK_TEAMMATES, true, "Track players if teammates");
+  CVar2WayBinding<bool> trackGrouped = CVar2WayBinding<bool>(CVAR_TRACK_GROUPED, true, "Track players if in party");
+  CVar2WayBinding<bool> enabledVisuals = CVar2WayBinding<bool>(CVAR_VISUALS, true, "Enables visuals");
+  CVar2WayBinding<bool> toggleWithScoreboard = CVar2WayBinding<bool>(CVAR_TOGGLE_WITH_SCOREBOARD, false, "Toggle with scoreboard (instead of always on)");
+  CVar2WayBinding<bool> showNotes = CVar2WayBinding<bool>(CVAR_SHOW_PLAYER_NOTES, false, "Show player notes in the visuals");
+  CVar2WayBinding<bool> enabledDebug = CVar2WayBinding<bool>(CVAR_DEBUG, false, "Enables debug view. Useful when changing visual settings");
+  CVar2WayBinding<bool> enabledLog = CVar2WayBinding<bool>(CVAR_LOG, false, "Enables logging");
+  CVar2WayBinding<bool> showMetCount = CVar2WayBinding<bool>(CVAR_SHOW_MET_COUNT, true, "Show the met count");
+  CVar2WayBinding<bool> showRecord = CVar2WayBinding<bool>(CVAR_SHOW_RECORD, false, "Show the record");
+  CVar2WayBinding<bool> showAllPlaylistsRecord = CVar2WayBinding<bool>(CVAR_SHOW_ALL_PLAYLISTS_RECORD, false, "Show record over all playlists");
+  CVar2WayBinding<float> scale = CVar2WayBinding<float>(CVAR_SCALE, 1.0f, "Scale of visuals", true, true, 0.0f, true, 4.0f);
+  CVar2WayBinding<float> alpha = CVar2WayBinding<float>(CVAR_ALPHA, 0.75f, "Alpha of visuals", true, true, 0.0f, true, 1.0f);
+  CVar2WayBinding<float> xPos = CVar2WayBinding<float>(CVAR_XPOS, 0.0f, "X position of visuals", true, true, 0.0f, true, 1.0f);
+  CVar2WayBinding<float> yPos = CVar2WayBinding<float>(CVAR_YPOS, 1.0f, "Y position of visuals", true, true, 0.0f, true, 1.0f);
+  CVar2WayBinding<float> width = CVar2WayBinding<float>(CVAR_WIDTH, 0.0f, "Width of visuals", true, true, 0.0f, true, 1.0f);
 
-	// DEPRECATED
-	[[deprecated("Use textColor instead")]]
-	CVar2WayBinding<int> textColorR =              CVar2WayBinding<int>(CVAR_TEXT_COLOR_RED, 0xff, "Text color: Red", false);
-	// DEPRECATED
-	[[deprecated("Use textColor instead")]]
-	CVar2WayBinding<int> textColorG =              CVar2WayBinding<int>(CVAR_TEXT_COLOR_GREEN, 0x00, "Text color: Green", false);
-	// DEPRECATED
-	[[deprecated("Use textColor instead")]]
-	CVar2WayBinding<int> textColorB =              CVar2WayBinding<int>(CVAR_TEXT_COLOR_BLUE, 0x00, "Text color: Blue", false);
-	CVar2WayBinding<LinearColor> textColor =       CVar2WayBinding<LinearColor>(CVAR_TEXT_COLOR, LinearColor{ 0xff, 0xff, 0xff, 0xff }, "Text color");
+  // DEPRECATED
+  [[deprecated("Use textColor instead")]]
+  CVar2WayBinding<int> textColorR = CVar2WayBinding<int>(CVAR_TEXT_COLOR_RED, 0xff, "Text color: Red", false);
+  // DEPRECATED
+  [[deprecated("Use textColor instead")]]
+  CVar2WayBinding<int> textColorG = CVar2WayBinding<int>(CVAR_TEXT_COLOR_GREEN, 0x00, "Text color: Green", false);
+  // DEPRECATED
+  [[deprecated("Use textColor instead")]]
+  CVar2WayBinding<int> textColorB = CVar2WayBinding<int>(CVAR_TEXT_COLOR_BLUE, 0x00, "Text color: Blue", false);
+  CVar2WayBinding<LinearColor> textColor = CVar2WayBinding<LinearColor>(CVAR_TEXT_COLOR, LinearColor{0xff, 0xff, 0xff, 0xff}, "Text color");
 
-	CVar2WayBinding<bool> enabledBorders =         CVar2WayBinding<bool>(CVAR_BORDERS, false, "Enables borders");
-	CVar2WayBinding<LinearColor> borderColor =     CVar2WayBinding<LinearColor>(CVAR_BORDER_COLOR, LinearColor{ 0xff, 0xff, 0xff, 0xff }, "Border color");
+  CVar2WayBinding<bool> enabledBorders = CVar2WayBinding<bool>(CVAR_BORDERS, false, "Enables borders");
+  CVar2WayBinding<LinearColor> borderColor = CVar2WayBinding<LinearColor>(CVAR_BORDER_COLOR, LinearColor{0xff, 0xff, 0xff, 0xff}, "Border color");
 
-	CVar2WayBinding<bool> enabledBackground =      CVar2WayBinding<bool>(CVAR_BACKGROUND, true, "Enables background");
+  CVar2WayBinding<bool> enabledBackground = CVar2WayBinding<bool>(CVAR_BACKGROUND, true, "Enables background");
 
-	// DEPRECATED
-	[[deprecated("Use backgroundColor instead")]]
-	CVar2WayBinding<int> backgroundColorR =        CVar2WayBinding<int>(CVAR_BACKGROUND_COLOR_RED, 0x00, "Background color: Red", false);
-	// DEPRECATED
-	[[deprecated("Use backgroundColor instead")]]
-	CVar2WayBinding<int> backgroundColorG =        CVar2WayBinding<int>(CVAR_BACKGROUND_COLOR_GREEN, 0x00, "Background color: Green", false);
-	// DEPRECATED
-	[[deprecated("Use backgroundColor instead")]]
-	CVar2WayBinding<int> backgroundColorB =        CVar2WayBinding<int>(CVAR_BACKGROUND_COLOR_BLUE, 0x00, "Background color: Blue", false);
-	CVar2WayBinding<LinearColor> backgroundColor = CVar2WayBinding<LinearColor>(CVAR_BACKGROUND_COLOR, LinearColor{ 0x00, 0x00, 0x00, 0xff }, "Background color");
-	CVar2WayBinding<bool> hasUpgradedColors =      CVar2WayBinding<bool>(CVAR_HAS_UPGRADED_COLORS, false, "Flag for upgrading colors", true);
+  // DEPRECATED
+  [[deprecated("Use backgroundColor instead")]]
+  CVar2WayBinding<int> backgroundColorR = CVar2WayBinding<int>(CVAR_BACKGROUND_COLOR_RED, 0x00, "Background color: Red", false);
+  // DEPRECATED
+  [[deprecated("Use backgroundColor instead")]]
+  CVar2WayBinding<int> backgroundColorG = CVar2WayBinding<int>(CVAR_BACKGROUND_COLOR_GREEN, 0x00, "Background color: Green", false);
+  // DEPRECATED
+  [[deprecated("Use backgroundColor instead")]]
+  CVar2WayBinding<int> backgroundColorB = CVar2WayBinding<int>(CVAR_BACKGROUND_COLOR_BLUE, 0x00, "Background color: Blue", false);
+  CVar2WayBinding<LinearColor> backgroundColor = CVar2WayBinding<LinearColor>(CVAR_BACKGROUND_COLOR, LinearColor{0x00, 0x00, 0x00, 0xff}, "Background color");
+  CVar2WayBinding<bool> hasUpgradedColors = CVar2WayBinding<bool>(CVAR_HAS_UPGRADED_COLORS, false, "Flag for upgrading colors", true);
 
-	CVar2WayBinding<std::string> mainGUIKeybind =  CVar2WayBinding<std::string>(CVAR_KEYBIND_MAIN_GUI, "None", "Main keybind");
-	CVar2WayBinding<std::string> quickNoteKeybind = CVar2WayBinding<std::string>(CVAR_KEYBIND_QUICK_NOTE, "None", "Quick note keybind");
+  CVar2WayBinding<std::string> mainGUIKeybind = CVar2WayBinding<std::string>(CVAR_KEYBIND_MAIN_GUI, "None", "Main keybind");
+  CVar2WayBinding<std::string> quickNoteKeybind = CVar2WayBinding<std::string>(CVAR_KEYBIND_QUICK_NOTE, "None", "Quick note keybind");
 #pragma endregion cvars
 
-	json data;
-	MMRWrapper mmrWrapper;
-	bool gameIsOver = false;
-	bool isAlreadyAddedToStats = false;
-	bool isScoreboardOpen = false;
-	std::optional<std::string> curMatchGUID;
+  std::map<std::string, PlayerData> allPlayersData;
+  MMRWrapper mmrWrapper;
+  bool gameIsOver = false;
+  bool isAlreadyAddedToStats = false;
+  bool isScoreboardOpen = false;
+  std::optional<std::string> curMatchGUID;
 
-	std::map<std::string, PriWrapper> currentMatchPRIs;
-	std::map<std::string, std::set<std::string>> matchesMetLists;
-	std::vector<RenderData> blueTeamRenderData;
-	std::vector<RenderData> orangeTeamRenderData;
-	std::vector<std::string> playerIDsToDisplay;
+  std::map<std::string, PriWrapper> currentMatchPRIs;
+  std::map<std::string, std::set<std::string>> matchesMetLists;
+  std::vector<RenderData> blueTeamRenderData;
+  std::vector<RenderData> orangeTeamRenderData;
+  std::vector<std::string> playerIDsToDisplay;
 
-	inline static auto mainFile = "player_counter.json";
-	inline static auto tmpFile  = "player_counter.json.tmp";
-	inline static auto bakFile  = "player_counter.json.bak";
-	inline static auto logFile  = "dejavu.log";
+  inline static auto mainFile = "player_counter.json";
+  inline static auto tmpFile = "player_counter.json.tmp";
+  inline static auto bakFile = "player_counter.json.bak";
+  inline static auto logFile = "dejavu.log";
 
-	inline static std::filesystem::path dataDir;
-	inline static std::filesystem::path mainPath;
-	inline static std::filesystem::path tmpPath;
-	inline static std::filesystem::path bakPath;
-	inline static std::filesystem::path logPath;
+  inline static std::filesystem::path dataDir;
+  inline static std::filesystem::path mainPath;
+  inline static std::filesystem::path tmpPath;
+  inline static std::filesystem::path bakPath;
+  inline static std::filesystem::path logPath;
 
-	void Log(std::string msg);
-	void LogError(std::string msg);
-	void LogChatbox(std::string msg);
-	void LoadData();
-	void WriteData();
-	void Reset();
-	void GetAndSetMetMMR(SteamID steamID, int playlist, SteamID idToSet);
-	Record GetRecord(UniqueIDWrapper uniqueID, PlaylistID playlist, Side side);
-	Record GetRecord(std::string uniqueID, PlaylistID playlist, Side side);
-	void SetRecord();
-	void RenderUI(const std::vector<RenderData>& renderData, const Canvas::CanvasTableOptions& tableOptions, const std::vector<Canvas::CanvasColumnOptions>& columnOptions, const bool renderPlayer);
-	void AddPlayerToRenderData(PriWrapper player);
-	void RemovePlayerFromRenderData(PriWrapper player);
-	bool IsInRealGame();
-	void HookAndLogEvent(std::string eventName);
+  void Log(std::string msg);
+  void LogError(std::string msg);
+  void LogChatbox(std::string msg);
+  void LoadData();
+  void WriteData();
+  void Reset();
+  void GetAndSetMetMMR(SteamID steamID, int playlist, SteamID idToSet);
+  Record GetRecord(UniqueIDWrapper uniqueID, PlaylistID playlist, Side side);
+  Record GetRecord(std::string uniqueID, PlaylistID playlist, Side side);
+  void SetRecord();
+  void RenderUI(const std::vector<RenderData> &renderData, const Canvas::CanvasTableOptions &tableOptions, const std::vector<Canvas::CanvasColumnOptions> &columnOptions, const bool renderPlayer);
+  void AddPlayerToRenderData(PriWrapper player);
+  void RemovePlayerFromRenderData(PriWrapper player);
+  bool IsInRealGame();
+  void HookAndLogEvent(std::string eventName);
 
-	std::optional<std::string> GetMatchGUID();
-	ServerWrapper GetCurrentServer();
-	PriWrapper GetLocalPlayerPRI();
+  std::optional<std::string> GetMatchGUID();
+  ServerWrapper GetCurrentServer();
+  PriWrapper GetLocalPlayerPRI();
 
-	void CleanUpJson();
-	void GenerateSettingsFile();
+  void CalculatePlayerRatios(PlayerData &player);
+  void RenderPlaystyleBar(CanvasWrapper canvas, float offenseRatio, Vector2 pos, Vector2 size);
+  void CleanUpJson();
+  void GenerateSettingsFile();
 
-	template <class T>
-	CVarWrapper RegisterCVar(
-		const char* name,
-		const char* description,
-		std::shared_ptr<T>& bindTo,
-		bool searchable = true,
-		bool hasMin = false,
-		float min = 0,
-		bool hasMax = false,
-		float max = 0,
-		bool saveToCfg = true
-	);
-
+  template <class T>
+  CVarWrapper RegisterCVar(
+      const char *name,
+      const char *description,
+      std::shared_ptr<T> &bindTo,
+      bool searchable = true,
+      bool hasMin = false,
+      float min = 0,
+      bool hasMax = false,
+      float max = 0,
+      bool saveToCfg = true);
 };
