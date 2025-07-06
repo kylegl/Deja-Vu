@@ -49,16 +49,14 @@ void MatchTracker::Render()
 
       for (const auto &uniqueID : matchMetList)
       {
-        auto &playerData = this->data["players"][uniqueID];
-        ImGui::Text(playerData["name"].get<std::string>().c_str());
+        const auto &playerData = this->players.at(uniqueID);
+        ImGui::Text(playerData.name.c_str());
         ImGui::NextColumn();
 
         float buttonPos = ImGui::GetCursorPosX() + ImGui::GetColumnWidth() - ImGui::GetScrollX() - 2 * ImGui::GetStyle().ItemSpacing.x;
-        if (!playerData.contains("note"))
-          playerData["note"] = "";
         float buttonWidth = 2 * ImGui::GetStyle().FramePadding.x + ImGui::CalcTextSize("Edit").x;
         ImGui::BeginChild((std::string("#note") + uniqueID).c_str(), ImVec2(ImGui::GetColumnWidth() - buttonWidth - 2 * ImGui::GetStyle().ItemSpacing.x, ImGui::GetFrameHeightWithSpacing()), false, ImGuiWindowFlags_NoScrollbar);
-        ImGui::TextWrapped(playerData["note"].get<std::string>().c_str());
+        ImGui::TextWrapped(playerData.note.c_str());
         ImGui::EndChild();
         ImGui::SameLine();
         ImGui::SetCursorPosX(buttonPos - buttonWidth);
@@ -169,18 +167,17 @@ void MatchTracker::Render()
   auto nameFilterView = std::string_view(nameFilter);
 
   int i = 0;
-  this->playerIDsToDisplay.resize(this->data["players"].size());
-  for (auto &player : this->data["players"].items())
+  this->playerIDsToDisplay.resize(this->players.size());
+  for (const auto &p : this->players)
   {
-    if (selectedPlaylist != PlaylistID::ANY && (!player.value()["playlistData"].contains(selectedPlaylistIDStr) || player.value()["playlistData"][selectedPlaylistIDStr]["records"].is_null()))
+    const auto &[id, player] = p;
+    if (selectedPlaylist != PlaylistID::ANY && (this->playerRecords.find(id) == this->playerRecords.end() || this->playerRecords.at(id).find(static_cast<int>(selectedPlaylist)) == this->playerRecords.at(id).end()))
       continue;
     // Default to player id
-    std::string name = player.key();
+    std::string name = id;
     try
     {
-      if (!player.value().count("name") || player.value()["name"].is_null())
-        player.value()["name"] = player.key();
-      name = player.value()["name"].get<std::string>();
+      name = player.name;
     }
     catch (const std::exception &e)
     {
@@ -193,7 +190,7 @@ void MatchTracker::Render()
                                  { return std::toupper(ch1) == std::toupper(ch2); }) == name.end();
     if (nameFilterView.size() > 0 && nameFound)
       continue;
-    this->playerIDsToDisplay[i++] = player.key();
+    this->playerIDsToDisplay[i++] = id;
   }
   this->playerIDsToDisplay.resize(i);
   ImGuiListClipper clipper((int)this->playerIDsToDisplay.size());
@@ -204,16 +201,10 @@ void MatchTracker::Render()
       for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
       {
         std::string uniqueID = this->playerIDsToDisplay[i];
-        auto &playerData = this->data["players"][uniqueID];
+        const auto &playerData = this->players.at(uniqueID);
 
-        int metCount = 0;
-        if (!playerData.count("metCount") || playerData["metCount"].is_null())
-          playerData["metCount"] = 1;
-        metCount = playerData["metCount"].get<int>();
-        std::string name = uniqueID;
-        if (!playerData.count("name") || playerData["name"].is_null())
-          playerData["name"] = uniqueID;
-        name = playerData["name"].get<std::string>();
+        int metCount = playerData.met_count;
+        std::string name = playerData.name;
 
         auto sameRecord = GetRecord(uniqueID, selectedPlaylist, Side::Same);
         auto otherRecord = GetRecord(uniqueID, selectedPlaylist, Side::Other);
@@ -232,11 +223,9 @@ void MatchTracker::Render()
         ImGui::NextColumn();
 
         float buttonPos = ImGui::GetCursorPosX() + ImGui::GetColumnWidth() - ImGui::GetScrollX() - 2 * ImGui::GetStyle().ItemSpacing.x;
-        if (!playerData.contains("note"))
-          playerData["note"] = "";
         float buttonWidth = 2 * ImGui::GetStyle().FramePadding.x + ImGui::CalcTextSize("Edit").x;
         ImGui::BeginChild((std::string("#note") + uniqueID).c_str(), ImVec2(ImGui::GetColumnWidth() - buttonWidth - 2 * ImGui::GetStyle().ItemSpacing.x, ImGui::GetFrameHeightWithSpacing()), false, ImGuiWindowFlags_NoScrollbar);
-        ImGui::TextWrapped(playerData["note"].get<std::string>().c_str());
+        ImGui::TextWrapped(playerData.note.c_str());
         ImGui::EndChild();
         ImGui::SameLine();
         ImGui::SetCursorPosX(buttonPos - buttonWidth);
@@ -290,28 +279,25 @@ void MatchTracker::RenderEditNoteModal()
     }
     else
     {
-      json::value_type playerData = this->data["players"][this->playersNoteToEdit];
-      if (!playerData.contains("note"))
-        playerData["note"] = "";
-      auto playerNote = playerData["note"].get_ptr<std::string *>();
+      auto &playerData = this->players.at(this->playersNoteToEdit);
+      auto playerNote = &playerData.note;
 
       ImVec2 textSize(
           ImGui::GetWindowWidth() - 2 * ImGui::GetStyle().WindowPadding.x,
           ImGui::GetWindowHeight() - 2 * ImGui::GetStyle().WindowPadding.y - ImGui::GetTextLineHeightWithSpacing() - 4 * ImGui::GetStyle().FramePadding.y - 4 * ImGui::GetStyle().ItemSpacing.y);
       if (ImGui::InputTextMultiline("##note", playerNote, textSize))
       {
-        this->data["players"][this->playersNoteToEdit]["note"] = *playerNote;
         auto blueMember = std::find_if(this->blueTeamRenderData.begin(), this->blueTeamRenderData.end(), [this](const RenderData &renderData)
-                                       { return renderData.id == this->playersNoteToEdit; });
+                                       { return renderData.PlayerID.GetIdString() == this->playersNoteToEdit; });
         if (blueMember != this->blueTeamRenderData.end())
-          (*blueMember).note = *playerNote;
+          (*blueMember).notes = *playerNote;
         else
         {
           auto orangeMember = std::find_if(this->orangeTeamRenderData.begin(), this->orangeTeamRenderData.end(), [this](const RenderData &renderData)
-                                           { return renderData.id == this->playersNoteToEdit; });
+                                           { return renderData.PlayerID.GetIdString() == this->playersNoteToEdit; });
 
           if (orangeMember != this->orangeTeamRenderData.end())
-            (*orangeMember).note = *playerNote;
+            (*orangeMember).notes = *playerNote;
         }
       }
       if (ImGui::IsWindowAppearing())
@@ -366,7 +352,8 @@ void MatchTracker::OnOpen()
 {
   this->isWindowOpen = true;
   this->cvarManager->getCvar("cl_dejavu_log").setValue(true);
-  this->playerIDsToDisplay.resize(this->data["players"].size());
+  LoadData();
+  this->playerIDsToDisplay.resize(this->players.size());
 }
 
 void MatchTracker::OnClose()
@@ -390,4 +377,9 @@ void MatchTracker::CloseMenu()
 void MatchTracker::ToggleMenu()
 {
   cvarManager->executeCommand("togglemenu " + GetMenuName());
+}
+
+void MatchTracker::ExportData()
+{
+  // empty
 }

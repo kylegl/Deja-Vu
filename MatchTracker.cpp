@@ -3,9 +3,6 @@
 #include "bakkesmod/wrappers/GameObject/Stats/StatEventWrapper.h"
 #include "imgui/imgui.h"
 #include <fstream>
-#include "nlohmann/json.hpp" // This file is not in the project, you need to add it. https://github.com/nlohmann/json
-
-using json = nlohmann::json;
 
 /**
  * TODO
@@ -90,9 +87,6 @@ void MatchTracker::onLoad()
   this->cvarManager->registerNotifier("dejavu_test", [this](const std::vector<std::string> &commands)
                                       { this->gameWrapper->SetTimeout([this](GameWrapper *gameWrapper)
                                                                       { Log("test after 5"); }, 5); }, "test", PERMISSION_ALL);
-
-  this->cvarManager->registerNotifier("dejavu_cleanup", [this](const std::vector<std::string> &commands)
-                                      { CleanUpJson(); }, "Cleans up the database", PERMISSION_ALL);
 
   this->cvarManager->registerNotifier("dejavu_dump_list", [this](const std::vector<std::string> &commands)
                                       {
@@ -303,22 +297,23 @@ void MatchTracker::onLoad()
     Function TAGame.GameEvent_Soccar_TA.EventMatchWinnerSet
   */
 
-  GenerateSettingsFile();
-
   this->gameWrapper->SetTimeout([this](GameWrapper *gameWrapper)
                                 {
-		if (!*this->hasUpgradedColors)
-		{
-			LOG(INFO) << "Upgrading colors...";
+  if (!*this->hasUpgradedColors)
+  {
+  	LOG(INFO) << "Upgrading colors...";
 #pragma warning(suppress : 4996)
-			this->textColor = LinearColor{ (float)*this->textColorR, (float)*this->textColorG, (float)*this->textColorB, 0xff };
+  	this->textColor = LinearColor{ (float)*this->textColorR, (float)*this->textColorG, (float)*this->textColorB, 0xff };
 #pragma warning(suppress : 4996)
-			this->backgroundColor = LinearColor{ (float)*this->backgroundColorR, (float)*this->backgroundColorG, (float)*this->backgroundColorB, 0xff };
-			this->hasUpgradedColors = true;
-			this->cvarManager->executeCommand("writeconfig");
-		}
+  	this->backgroundColor = LinearColor{ (float)*this->backgroundColorR, (float)*this->backgroundColorG, (float)*this->backgroundColorB, 0xff };
+  	this->hasUpgradedColors = true;
+  	this->cvarManager->executeCommand("writeconfig");
+  }
 
-		LOG(INFO) << "---DEJAVU LOADED---"; }, 0.001f);
+  LOG(INFO) << "---DEJAVU LOADED---";
+ 
+   this->GenerateSettingsFile(); },
+                                0.001f);
 
 #if DEV
   this->cvarManager->executeCommand("exec tmp.cfg");
@@ -546,6 +541,19 @@ void MatchTracker::AddPlayerToRenderData(PriWrapper player)
   Record allRecord = GetRecord(uniqueIDStr, PlaylistID::ANY, sameTeam ? Side::Same : Side::Other);
   LOG(INFO) << "player team num: " << std::to_string(theirTeamNum);
   std::string playerName = player.GetPlayerName().ToString();
+  RenderData renderData = {
+      playerName,
+      player.GetUniqueIdWrapper(),
+      theirTeamNum,
+      record,
+      metCount,
+      playerNote,
+      false,
+      std::make_shared<PlayerData>(playerData)};
+  if (theirTeamNum == 0)
+    this->blueTeamRenderData.push_back(renderData);
+  else
+    this->orangeTeamRenderData.push_back(renderData);
 }
 
 void MatchTracker::RemovePlayerFromRenderData(PriWrapper player)
@@ -556,6 +564,12 @@ void MatchTracker::RemovePlayerFromRenderData(PriWrapper player)
     LOG(INFO) << "Removing player: " << player.GetPlayerName().ToString();
   std::string steamID = player.GetUniqueIdWrapper().str();
   LOG(INFO) << "Player SteamID: " << steamID;
+  this->blueTeamRenderData.erase(std::remove_if(this->blueTeamRenderData.begin(), this->blueTeamRenderData.end(), [steamID](const RenderData &data)
+                                                { return data.PlayerID.GetIdString() == steamID; }),
+                                 this->blueTeamRenderData.end());
+  this->orangeTeamRenderData.erase(std::remove_if(this->orangeTeamRenderData.begin(), this->orangeTeamRenderData.end(), [steamID](const RenderData &data)
+                                                  { return data.PlayerID.GetIdString() == steamID; }),
+                                   this->orangeTeamRenderData.end());
 }
 
 void MatchTracker::HandlePlayerRemoved(std::string eventName)
@@ -666,15 +680,21 @@ void MatchTracker::HandleGameLeave(std::string eventName)
   this->isAlreadyAddedToStats = false;
 }
 
-void MatchTracker::OnStatEvent(ServerWrapper caller, void *params, std::string eventName)
+void MatchTracker::OnStatEvent(ServerWrapper server, void *params, std::string eventName)
 {
   if (params == nullptr)
   {
     return;
   }
-  auto server = GetCurrentServer();
+
   if (server.IsNull())
     return;
+
+  struct StatEventParams
+  {
+    uintptr_t PRI;
+    uintptr_t StatEvent;
+  };
 
   StatEventParams *pStruct = (StatEventParams *)params;
   PriWrapper playerPRI = PriWrapper(pStruct->PRI);
@@ -708,7 +728,7 @@ void MatchTracker::OnStatEvent(ServerWrapper caller, void *params, std::string e
     playlistRecord.playlist_id = static_cast<int>(playlist);
   }
 
-  std::string statName = statEvent.GetStatName();
+  std::string statName = statEvent.GetEventName();
 
   if (statName == "Goal")
     playlistRecord.goals++;
@@ -742,7 +762,7 @@ void MatchTracker::OnStatEvent(ServerWrapper caller, void *params, std::string e
     dbManager->update_playlist_record(playlistRecord);
   }
 
-  Log(playerPRI.GetPlayerName().ToString() + " got stat: " + statEvent.GetStatName());
+  this->Log(playerPRI.GetPlayerName().ToString() + " got stat: " + statEvent.GetEventName());
 }
 
 void MatchTracker::Reset()
@@ -922,12 +942,6 @@ bool MatchTracker::IsInRealGame()
 
 static float MetCountColumnWidth;
 static float RecordColumnWidth;
-void MatchTracker::CleanUpJson()
-{
-  // This function is now dangerous as it would delete players with only one game.
-  // I will disable it for now.
-  this->cvarManager->log("CleanUpJson is disabled for now.");
-}
 
 void MatchTracker::CalculatePlayerRatios(PlayerData &player)
 {
@@ -966,76 +980,27 @@ void MatchTracker::CalculatePlayerRatios(PlayerData &player)
   }
 }
 
-void MatchTracker::GenerateSettingsFile()
+void MatchTracker::WriteData()
 {
-  this->cvarManager->executeCommand("writeconfig");
-}
-void MatchTracker::Render()
-{
-  ImGui::Text("Deja Vu Plugin Settings");
-
-  if (ImGui::Button("Export All Data"))
+  for (const auto &p : this->players)
   {
-    ExportData();
+    this->dbManager->update_player(p.second);
   }
 }
 
-void MatchTracker::ExportData()
+void MatchTracker::LoadData()
 {
+  this->players.clear();
+  this->playerRecords.clear();
   std::vector<PlayerWithRecords> players_with_records;
-  if (!this->dbManager->get_all_players_with_records(players_with_records))
-  {
-    this->cvarManager->log("Failed to get players from database.");
-    return;
-  }
-
-  json exportJson = json::object();
-
+  this->dbManager->get_all_players_with_records(players_with_records);
   for (const auto &pwr : players_with_records)
   {
-    json playerJson;
-    playerJson["name"] = pwr.player.name;
-    playerJson["met"] = pwr.player.met_count;
-    playerJson["note"] = pwr.player.note;
-    playerJson["offense_ratio"] = pwr.player.offense_ratio;
-    playerJson["defense_ratio"] = pwr.player.defense_ratio;
-
-    json recordsJson = json::object();
+    this->players[pwr.player.id] = pwr.player;
     for (const auto &record : pwr.records)
     {
-      json recordJson;
-      recordJson["with"]["wins"] = record.with_wins;
-      recordJson["with"]["losses"] = record.with_losses;
-      recordJson["against"]["wins"] = record.against_wins;
-      recordJson["against"]["losses"] = record.against_losses;
-      recordJson["goals"] = record.goals;
-      recordJson["assists"] = record.assists;
-      recordJson["shots"] = record.shots;
-      recordJson["saves"] = record.saves;
-      recordJson["epic_saves"] = record.epic_saves;
-      recordJson["clears"] = record.clears;
-      recordJson["demos"] = record.demos;
-      recordJson["center_balls"] = record.center_balls;
-      recordJson["hat_tricks"] = record.hat_tricks;
-      recordJson["playmakers"] = record.playmakers;
-      recordJson["saviors"] = record.saviors;
-      recordsJson[std::to_string(record.playlist_id)] = recordJson;
+      this->playerRecords[pwr.player.id][record.playlist_id] = record;
     }
-    playerJson["records"] = recordsJson;
-    exportJson[pwr.player.id] = playerJson;
-  }
-
-  std::filesystem::path export_path = dataDir / "dejavu_export.json";
-  std::ofstream file(export_path);
-  if (file.is_open())
-  {
-    file << exportJson.dump(4); // pretty print with 4 spaces
-    file.close();
-    this->cvarManager->log("Data exported successfully to dejavu_export.json");
-  }
-  else
-  {
-    this->cvarManager->log("Failed to open dejavu_export.json for writing.");
   }
 }
 
@@ -1062,8 +1027,8 @@ void MatchTracker::RenderPlaystyleBar(CanvasWrapper canvas, float offenseRatio, 
   std::string offensePercent = std::to_string((int)(offenseRatio * 100));
   std::string defensePercent = std::to_string(100 - (int)(offenseRatio * 100));
   std::string text = offensePercent + "% / " + defensePercent + "%";
-  Vector2 textSize = canvas.GetStringSize(text);
-  Vector2 textPos = {pos.X + (size.X / 2) - (textSize.X / 2), pos.Y + (size.Y / 2) - (textSize.Y / 2)};
+  Vector2F textSize = canvas.GetStringSize(text);
+  Vector2 textPos = {(int)(pos.X + (size.X / 2) - (textSize.X / 2)), (int)(pos.Y + (size.Y / 2) - (textSize.Y / 2))};
   canvas.SetPosition(textPos);
   canvas.DrawString(text);
 }
@@ -1095,7 +1060,7 @@ void MatchTracker::RenderDrawable(CanvasWrapper canvas)
   std::vector<std::string> teammates;
   std::vector<std::string> opponents;
   int localPlayerTeam = localPlayer.GetTeamNum();
-  for (auto const &[playerID, playerPRI] : this->currentMatchPRIs)
+  for (auto &[playerID, playerPRI] : this->currentMatchPRIs)
   {
     if (playerPRI.GetTeamNum() == localPlayerTeam)
     {

@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "bakkesmod/plugin/bakkesmodplugin.h"
+#include "bakkesmod/wrappers/UniqueIDWrapper.h"
 #include "bakkesmod/plugin/pluginwindow.h"
 
 #include "Canvas.h"
@@ -138,6 +139,18 @@ enum TEAM : unsigned char
   TEAM_ORANGE = 1,
 };
 
+struct RenderData
+{
+  std::string PlayerName;
+  UniqueIDWrapper PlayerID;
+  int Team;
+  Record record;
+  int metCount;
+  std::string notes;
+  bool isInParty;
+  std::shared_ptr<PlayerData> player;
+};
+
 struct Rect
 {
   int X, Y, Width, Height;
@@ -254,10 +267,8 @@ private:
   std::vector<RenderData> blueTeamRenderData;
   std::vector<RenderData> orangeTeamRenderData;
   std::vector<std::string> playerIDsToDisplay;
-
-  inline static auto mainFile = "player_counter.json";
-  inline static auto tmpFile = "player_counter.json.tmp";
-  inline static auto bakFile = "player_counter.json.bak";
+  std::map<std::string, PlayerData> players;
+  std::map<std::string, std::map<int, PlaylistRecord>> playerRecords;
   inline static auto logFile = "match_tracker.log";
 
   inline static std::filesystem::path dataDir;
@@ -286,7 +297,8 @@ private:
 
   void CalculatePlayerRatios(PlayerData &player);
   void RenderPlaystyleBar(CanvasWrapper canvas, float offenseRatio, Vector2 pos, Vector2 size);
-  void CleanUpJson();
+  void LoadData();
+  void WriteData();
   void GenerateSettingsFile();
 
   template <class T>
