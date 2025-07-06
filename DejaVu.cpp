@@ -2,6 +2,10 @@
 #include "DejaVu.h"
 #include "bakkesmod/wrappers/GameObject/Stats/StatEventWrapper.h"
 #include "imgui/imgui.h"
+#include <fstream>
+#include "nlohmann/json.hpp" // This file is not in the project, you need to add it. https://github.com/nlohmann/json
+
+using json = nlohmann::json;
 
 /**
  * TODO
@@ -63,23 +67,24 @@ void DejaVu::onLoad()
   this->mmrWrapper = this->gameWrapper->GetMMRWrapper();
 
   this->dataDir = this->gameWrapper->GetDataFolder().append("dejavu");
-  this->mainPath = std::filesystem::path(dataDir).append(this->mainFile);
-  this->tmpPath = std::filesystem::path(dataDir).append(this->tmpFile);
-  this->bakPath = std::filesystem::path(dataDir).append(this->bakFile);
   this->logPath = std::filesystem::path(dataDir).append(this->logFile);
-
-  this->cvarManager->registerNotifier("dejavu_reload", [this](const std::vector<std::string> &commands)
-                                      { LoadData(); }, "Reloads the json data from file", PERMISSION_ALL);
+  std::string dbPath = std::filesystem::path(dataDir).append("dejavu.db").string();
+  this->dbManager = std::make_unique<DatabaseManager>(dbPath);
+  this->dbManager->connect();
+  this->dbManager->create_tables();
 
   this->cvarManager->registerNotifier("dejavu_track_current", [this](const std::vector<std::string> &commands)
                                       { HandlePlayerAdded("dejavu_track_current"); }, "Tracks current lobby", PERMISSION_ONLINE);
 
+  this->cvarManager->registerNotifier("dejavu_export_json", [this](const std::vector<std::string> &commands)
+                                      { ExportData(); }, "Exports all player data to a JSON file.", PERMISSION_ALL);
+
   this->cvarManager->registerNotifier("dejavu_launch_quick_note", [this](const std::vector<std::string> &commands)
                                       {
 #if !DEV
-		if (IsInRealGame())
+  if (IsInRealGame())
 #endif !DEV
-			LaunchQuickNoteModal(); }, "Launches the quick note modal", PERMISSION_ONLINE);
+  	LaunchQuickNoteModal(); }, "Launches the quick note modal", PERMISSION_ONLINE);
 
 #if DEV
   this->cvarManager->registerNotifier("dejavu_test", [this](const std::vector<std::string> &commands)
@@ -87,7 +92,7 @@ void DejaVu::onLoad()
                                                                       { Log("test after 5"); }, 5); }, "test", PERMISSION_ALL);
 
   this->cvarManager->registerNotifier("dejavu_cleanup", [this](const std::vector<std::string> &commands)
-                                      { CleanUpJson(); }, "Cleans up the json", PERMISSION_ALL);
+                                      { CleanUpJson(); }, "Cleans up the database", PERMISSION_ALL);
 
   this->cvarManager->registerNotifier("dejavu_dump_list", [this](const std::vector<std::string> &commands)
                                       {
@@ -298,8 +303,6 @@ void DejaVu::onLoad()
     Function TAGame.GameEvent_Soccar_TA.EventMatchWinnerSet
   */
 
-  LoadData();
-
   GenerateSettingsFile();
 
   this->gameWrapper->SetTimeout([this](GameWrapper *gameWrapper)
@@ -325,7 +328,6 @@ void DejaVu::onLoad()
 void DejaVu::onUnload()
 {
   LOG(INFO) << "---DEJAVU UNLOADED---";
-  WriteData();
 
 #if DEV
   this->cvarManager->backupCfg("./bakkesmod/cfg/tmp.cfg");
@@ -359,100 +361,6 @@ void DejaVu::LogChatbox(std::string msg)
 {
   this->gameWrapper->LogToChatbox(msg);
   LOG(INFO) << msg;
-}
-
-void DejaVu::LoadData()
-{
-  // Upgrade old file path
-  if (std::filesystem::exists(this->mainFile))
-  {
-    Log("Upgrading old file path");
-    std::filesystem::create_directories(this->dataDir);
-    std::filesystem::rename(this->mainFile, this->mainPath);
-    std::filesystem::rename(this->bakFile, this->bakPath);
-  }
-
-  std::ifstream in(this->mainPath);
-  if (in.fail())
-  {
-    LogError("Failed to open file, creating new one.");
-    LogError(strerror(errno));
-    this->allPlayersData.clear();
-    WriteData();
-    return;
-  }
-
-  try
-  {
-    json j;
-    in >> j;
-    // Check if we're using the old data format
-    if (j.contains("players"))
-    {
-      Log("Old data format detected, resetting data.");
-      this->allPlayersData.clear();
-      WriteData();
-    }
-    else
-    {
-      this->allPlayersData = j.get<std::map<std::string, PlayerData>>();
-    }
-  }
-  catch (const nlohmann::detail::exception &e)
-  {
-    in.close();
-    LogError("Failed to parse json. It might be corrupt. Resetting data.");
-    LogError(e.what());
-    this->allPlayersData.clear();
-    WriteData();
-    return;
-  }
-
-  Log("Successfully loaded existing data");
-  in.close();
-}
-
-void DejaVu::WriteData()
-{
-  LOG(INFO) << "WriteData";
-  std::filesystem::create_directories(this->dataDir);
-
-  std::ofstream out(this->tmpPath);
-  try
-  {
-    json j = this->allPlayersData;
-    out << j.dump(4, ' ', false, json::error_handler_t::replace) << std::endl;
-    out.close();
-    std::error_code err;
-    std::filesystem::remove(this->bakPath, err);
-    if (std::filesystem::exists(this->mainPath))
-    {
-      std::filesystem::rename(this->mainPath, this->bakPath, err);
-      if (err.value() != 0)
-      {
-        LogError("Could not backup player counter");
-        LogError(err.message());
-        return;
-      }
-    }
-    std::filesystem::rename(this->tmpPath, this->mainPath, err);
-    if (err.value() != 0)
-    {
-      LogError("Could not move temp file to main");
-      LogError(err.message());
-      std::filesystem::rename(this->bakPath, this->mainPath, err);
-      return;
-    }
-  }
-  catch (const nlohmann::detail::exception &e)
-  {
-    LogError("failed to serialize json");
-    LogError(e.what());
-  }
-  catch (...)
-  {
-    LogError("failed to serialize json (unknown)");
-  }
 }
 
 std::optional<std::string> DejaVu::GetMatchGUID()
@@ -579,22 +487,23 @@ void DejaVu::HandlePlayerAdded(std::string eventName)
       {
         LOG(INFO) << "Haven't processed yet: " << playerName;
         this->matchesMetLists[this->curMatchGUID.value()].emplace(uniqueIDStr);
-        if (this->allPlayersData.find(uniqueIDStr) == this->allPlayersData.end())
+
+        PlayerData playerData;
+        if (!this->dbManager->get_player(uniqueIDStr, playerData))
         {
           LOG(INFO) << "Haven't met yet: " << playerName;
-          this->allPlayersData[uniqueIDStr] = {
-              .name = playerName,
-              .metCount = 1,
-          };
+          playerData.id = uniqueIDStr;
+          playerData.name = playerName;
+          playerData.met_count = 1;
+          this->dbManager->create_player(playerData);
         }
         else
         {
           LOG(INFO) << "Have met before: " << playerName;
-          PlayerData &playerData = this->allPlayersData[uniqueIDStr];
-          playerData.metCount++;
+          playerData.met_count++;
           playerData.name = playerName;
+          this->dbManager->update_player(playerData);
         }
-        needsSave = true;
       }
       AddPlayerToRenderData(player);
     }
@@ -603,9 +512,6 @@ void DejaVu::HandlePlayerAdded(std::string eventName)
       LOG(INFO) << "localPlayer is null";
     }
   }
-
-  if (needsSave)
-    WriteData();
 }
 
 void DejaVu::AddPlayerToRenderData(PriWrapper player)
@@ -630,8 +536,9 @@ void DejaVu::AddPlayerToRenderData(PriWrapper player)
 
   LOG(INFO) << "adding player: " << player.GetPlayerName().ToString();
 
-  PlayerData &playerData = this->allPlayersData[uniqueIDStr];
-  int metCount = playerData.metCount;
+  PlayerData playerData;
+  this->dbManager->get_player(uniqueIDStr, playerData);
+  int metCount = playerData.met_count;
   std::string playerNote = playerData.note;
 
   bool sameTeam = theirTeamNum == myTeamNum;
@@ -745,7 +652,6 @@ void DejaVu::GameOver()
   if (!this->isAlreadyAddedToStats)
   {
     SetRecord();
-    WriteData();
     Reset();
     this->gameIsOver = true;
     this->isAlreadyAddedToStats = true;
@@ -755,7 +661,6 @@ void DejaVu::GameOver()
 void DejaVu::HandleGameLeave(std::string eventName)
 {
   LOG(INFO) << eventName;
-  WriteData();
   Reset();
   this->curMatchGUID = std::nullopt;
   this->isAlreadyAddedToStats = false;
@@ -784,31 +689,58 @@ void DejaVu::OnStatEvent(ServerWrapper caller, void *params, std::string eventNa
     return;
 
   PlaylistID playlist = static_cast<PlaylistID>(server.GetPlaylist().GetPlaylistId());
-  PlayerPlaylistData &playlistData = this->allPlayersData[uniqueIDStr].playlistData[static_cast<int>(playlist)];
+  PlaylistRecord playlistRecord;
+  // This is not ideal, but we'll need a way to get a specific record for a player and playlist.
+  // For now, let's assume a new record is created if one doesn't exist.
+  std::vector<PlaylistRecord> records;
+  dbManager->get_playlist_records_for_player(uniqueIDStr, records);
+
+  auto it = std::find_if(records.begin(), records.end(), [playlist](const PlaylistRecord &r)
+                         { return r.playlist_id == static_cast<int>(playlist); });
+
+  if (it != records.end())
+  {
+    playlistRecord = *it;
+  }
+  else
+  {
+    playlistRecord.player_id = uniqueIDStr;
+    playlistRecord.playlist_id = static_cast<int>(playlist);
+  }
+
   std::string statName = statEvent.GetStatName();
 
   if (statName == "Goal")
-    playlistData.stats.goals++;
+    playlistRecord.goals++;
   else if (statName == "Assist")
-    playlistData.stats.assists++;
+    playlistRecord.assists++;
   else if (statName == "Shot")
-    playlistData.stats.shots++;
+    playlistRecord.shots++;
   else if (statName == "Save")
-    playlistData.stats.saves++;
+    playlistRecord.saves++;
   else if (statName == "EpicSave")
-    playlistData.stats.epicSaves++;
+    playlistRecord.epic_saves++;
   else if (statName == "Clear")
-    playlistData.stats.clears++;
+    playlistRecord.clears++;
   else if (statName == "Hat Trick")
-    playlistData.stats.hatTricks++;
+    playlistRecord.hat_tricks++;
   else if (statName == "Playmaker")
-    playlistData.stats.playmakers++;
+    playlistRecord.playmakers++;
   else if (statName == "Savior")
-    playlistData.stats.saviors++;
+    playlistRecord.saviors++;
   else if (statName == "Center")
-    playlistData.stats.centerBalls++;
+    playlistRecord.center_balls++;
   else if (statName == "Demolition")
-    playlistData.stats.demos++;
+    playlistRecord.demos++;
+
+  if (playlistRecord.id == 0)
+  {
+    dbManager->create_playlist_record(playlistRecord);
+  }
+  else
+  {
+    dbManager->update_playlist_record(playlistRecord);
+  }
 
   Log(playerPRI.GetPlayerName().ToString() + " got stat: " + statEvent.GetStatName());
 }
@@ -854,38 +786,44 @@ Record DejaVu::GetRecord(UniqueIDWrapper uniqueID, PlaylistID playlist, Side sid
 
 Record DejaVu::GetRecord(std::string uniqueID, PlaylistID playlist, Side side)
 {
-  if (this->allPlayersData.find(uniqueID) == this->allPlayersData.end())
+  PlayerData playerData;
+  if (!this->dbManager->get_player(uniqueID, playerData))
     return {0, 0};
 
-  PlayerData &playerData = this->allPlayersData[uniqueID];
+  std::vector<PlaylistRecord> records;
+  this->dbManager->get_playlist_records_for_player(uniqueID, records);
 
   if (playlist == PlaylistID::ANY)
   {
     Record combinedRecord{};
-    for (auto const &[playlistID, playlistData] : playerData.playlistData)
+    for (const auto &record : records)
     {
       if (side == Side::Same)
       {
-        combinedRecord.wins += playlistData.withRecord.wins;
-        combinedRecord.losses += playlistData.withRecord.losses;
+        combinedRecord.wins += record.with_wins;
+        combinedRecord.losses += record.with_losses;
       }
       else
       {
-        combinedRecord.wins += playlistData.againstRecord.wins;
-        combinedRecord.losses += playlistData.againstRecord.losses;
+        combinedRecord.wins += record.against_wins;
+        combinedRecord.losses += record.against_losses;
       }
     }
     return combinedRecord;
   }
 
-  if (playerData.playlistData.find(static_cast<int>(playlist)) == playerData.playlistData.end())
-    return {0, 0};
+  for (const auto &record : records)
+  {
+    if (record.playlist_id == static_cast<int>(playlist))
+    {
+      if (side == Side::Same)
+        return {record.with_wins, record.with_losses};
+      else
+        return {record.against_wins, record.against_losses};
+    }
+  }
 
-  PlayerPlaylistData &playlistData = playerData.playlistData[static_cast<int>(playlist)];
-  if (side == Side::Same)
-    return playlistData.withRecord;
-  else
-    return playlistData.againstRecord;
+  return {0, 0};
 }
 
 void DejaVu::SetRecord()
@@ -922,14 +860,58 @@ void DejaVu::SetRecord()
 
     bool sameTeam = player.GetTeamNum() == localPRI.GetTeamNum();
 
-    PlayerPlaylistData &playlistData = this->allPlayersData[uniqueIDStr].playlistData[static_cast<int>(playlist)];
-    Record &record = sameTeam ? playlistData.withRecord : playlistData.againstRecord;
-    if (myTeamWon)
-      record.wins++;
-    else
-      record.losses++;
+    std::vector<PlaylistRecord> records;
+    this->dbManager->get_playlist_records_for_player(uniqueIDStr, records);
 
-    CalculatePlayerRatios(this->allPlayersData[uniqueIDStr]);
+    PlaylistRecord *playlistRecord = nullptr;
+    for (auto &rec : records)
+    {
+      if (rec.playlist_id == static_cast<int>(playlist))
+      {
+        playlistRecord = &rec;
+        break;
+      }
+    }
+
+    if (!playlistRecord)
+    {
+      PlaylistRecord newRecord;
+      newRecord.player_id = uniqueIDStr;
+      newRecord.playlist_id = static_cast<int>(playlist);
+      this->dbManager->create_playlist_record(newRecord);
+      // a bit inefficient to fetch again, but it's the easiest way to get the ID
+      this->dbManager->get_playlist_records_for_player(uniqueIDStr, records);
+      for (auto &rec : records)
+      {
+        if (rec.playlist_id == static_cast<int>(playlist))
+        {
+          playlistRecord = &rec;
+          break;
+        }
+      }
+    }
+
+    if (sameTeam)
+    {
+      if (myTeamWon)
+        playlistRecord->with_wins++;
+      else
+        playlistRecord->with_losses++;
+    }
+    else
+    {
+      if (myTeamWon)
+        playlistRecord->against_wins++;
+      else
+        playlistRecord->against_losses++;
+    }
+
+    this->dbManager->update_playlist_record(*playlistRecord);
+
+    PlayerData playerData;
+    this->dbManager->get_player(uniqueIDStr, playerData);
+    CalculatePlayerRatios(playerData);
+    this->dbManager->update_player(playerData);
   }
 }
 
@@ -942,53 +924,44 @@ static float MetCountColumnWidth;
 static float RecordColumnWidth;
 void DejaVu::CleanUpJson()
 {
-  int totalRemoved = 0;
-  for (auto it = this->allPlayersData.begin(); it != this->allPlayersData.end();)
-  {
-    if (it->second.metCount <= 1)
-    {
-      it = this->allPlayersData.erase(it);
-      totalRemoved++;
-    }
-    else
-    {
-      ++it;
-    }
-  }
-  this->cvarManager->log("Removed " + std::to_string(totalRemoved) + " players");
-  WriteData();
+  // This function is now dangerous as it would delete players with only one game.
+  // I will disable it for now.
+  this->cvarManager->log("CleanUpJson is disabled for now.");
 }
 
 void DejaVu::CalculatePlayerRatios(PlayerData &player)
 {
+  std::vector<PlaylistRecord> records;
+  this->dbManager->get_playlist_records_for_player(player.id, records);
+
   float totalOffensivePoints = 0;
   float totalDefensivePoints = 0;
 
-  for (auto const &[playlistID, playlistData] : player.playlistData)
+  for (const auto &record : records)
   {
-    totalOffensivePoints += playlistData.stats.goals * 10;
-    totalOffensivePoints += playlistData.stats.assists * 5;
-    totalOffensivePoints += playlistData.stats.shots * 1;
-    totalOffensivePoints += playlistData.stats.centerBalls * 1;
-    totalOffensivePoints += playlistData.stats.hatTricks * 2.5;
-    totalOffensivePoints += playlistData.stats.playmakers * 2.5;
+    totalOffensivePoints += record.goals * 10;
+    totalOffensivePoints += record.assists * 5;
+    totalOffensivePoints += record.shots * 1;
+    totalOffensivePoints += record.center_balls * 1;
+    totalOffensivePoints += record.hat_tricks * 2.5;
+    totalOffensivePoints += record.playmakers * 2.5;
 
-    totalDefensivePoints += playlistData.stats.saves * 5;
-    totalDefensivePoints += playlistData.stats.epicSaves * 7.5;
-    totalDefensivePoints += playlistData.stats.clears * 2;
-    totalDefensivePoints += playlistData.stats.saviors * 2.5;
+    totalDefensivePoints += record.saves * 5;
+    totalDefensivePoints += record.epic_saves * 7.5;
+    totalDefensivePoints += record.clears * 2;
+    totalDefensivePoints += record.saviors * 2.5;
   }
 
-  if (player.metCount > 0)
+  if (player.met_count > 0)
   {
-    float avgOffensivePoints = totalOffensivePoints / player.metCount;
-    float avgDefensivePoints = totalDefensivePoints / player.metCount;
+    float avgOffensivePoints = totalOffensivePoints / player.met_count;
+    float avgDefensivePoints = totalDefensivePoints / player.met_count;
     float totalPoints = avgOffensivePoints + avgDefensivePoints;
 
     if (totalPoints > 0)
     {
-      player.offenseRatio = avgOffensivePoints / totalPoints;
-      player.defenseRatio = avgDefensivePoints / totalPoints;
+      player.offense_ratio = avgOffensivePoints / totalPoints;
+      player.defense_ratio = avgDefensivePoints / totalPoints;
     }
   }
 }
@@ -1009,12 +982,60 @@ void DejaVu::Render()
 
 void DejaVu::ExportData()
 {
-  std::ofstream file(dataDir / "export.json");
+  std::vector<PlayerWithRecords> players_with_records;
+  if (!this->dbManager->get_all_players_with_records(players_with_records))
+  {
+    this->cvarManager->log("Failed to get players from database.");
+    return;
+  }
+
+  json exportJson = json::object();
+
+  for (const auto &pwr : players_with_records)
+  {
+    json playerJson;
+    playerJson["name"] = pwr.player.name;
+    playerJson["met"] = pwr.player.met_count;
+    playerJson["note"] = pwr.player.note;
+    playerJson["offense_ratio"] = pwr.player.offense_ratio;
+    playerJson["defense_ratio"] = pwr.player.defense_ratio;
+
+    json recordsJson = json::object();
+    for (const auto &record : pwr.records)
+    {
+      json recordJson;
+      recordJson["with"]["wins"] = record.with_wins;
+      recordJson["with"]["losses"] = record.with_losses;
+      recordJson["against"]["wins"] = record.against_wins;
+      recordJson["against"]["losses"] = record.against_losses;
+      recordJson["goals"] = record.goals;
+      recordJson["assists"] = record.assists;
+      recordJson["shots"] = record.shots;
+      recordJson["saves"] = record.saves;
+      recordJson["epic_saves"] = record.epic_saves;
+      recordJson["clears"] = record.clears;
+      recordJson["demos"] = record.demos;
+      recordJson["center_balls"] = record.center_balls;
+      recordJson["hat_tricks"] = record.hat_tricks;
+      recordJson["playmakers"] = record.playmakers;
+      recordJson["saviors"] = record.saviors;
+      recordsJson[std::to_string(record.playlist_id)] = recordJson;
+    }
+    playerJson["records"] = recordsJson;
+    exportJson[pwr.player.id] = playerJson;
+  }
+
+  std::filesystem::path export_path = dataDir / "dejavu_export.json";
+  std::ofstream file(export_path);
   if (file.is_open())
   {
-    json j = allPlayersData;
-    file << j.dump(4);
+    file << exportJson.dump(4); // pretty print with 4 spaces
     file.close();
+    this->cvarManager->log("Data exported successfully to dejavu_export.json");
+  }
+  else
+  {
+    this->cvarManager->log("Failed to open dejavu_export.json for writing.");
   }
 }
 
@@ -1095,12 +1116,7 @@ void DejaVu::RenderDrawable(CanvasWrapper canvas)
   auto render_player_row = [&](const std::string &playerID, PlaylistID playlist)
   {
     PlayerData playerData;
-    auto it = this->allPlayersData.find(playerID);
-    if (it != this->allPlayersData.end())
-    {
-      playerData = it->second;
-    }
-    else
+    if (!this->dbManager->get_player(playerID, playerData))
     {
       auto pri_it = this->currentMatchPRIs.find(playerID);
       if (pri_it != this->currentMatchPRIs.end() && !pri_it->second.IsNull())
@@ -1113,7 +1129,7 @@ void DejaVu::RenderDrawable(CanvasWrapper canvas)
       }
     }
 
-    int matches = playerData.metCount;
+    int matches = playerData.met_count;
     Record withRecord = GetRecord(playerID, playlist, Side::Same);
     Record againstRecord = GetRecord(playerID, playlist, Side::Other);
 
@@ -1128,7 +1144,7 @@ void DejaVu::RenderDrawable(CanvasWrapper canvas)
     Canvas::SetPosition(Vector2{RECORD_COL_X, (int)y_pos});
     Canvas::DrawString(recordStr);
 
-    RenderPlaystyleBar(canvas, playerData.offenseRatio, Vector2{PLAYSTYLE_COL_X, (int)y_pos}, Vector2{150, 18});
+    RenderPlaystyleBar(canvas, playerData.offense_ratio, Vector2{PLAYSTYLE_COL_X, (int)y_pos}, Vector2{150, 18});
 
     y_pos += 20;
   };

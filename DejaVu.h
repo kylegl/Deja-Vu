@@ -14,7 +14,8 @@
 #include "Canvas.h"
 #include "CVar2WayBinding.h"
 
-using json = nlohmann::json;
+#include "DatabaseManager.h"
+#include <memory>
 
 #include "Version.h"
 constexpr auto PluginVersion = stringify(VERSION_MAJOR) "." stringify(VERSION_MINOR) "." stringify(VERSION_PATCH) "." stringify(VERSION_BUILD) stringify(VERSION_PHASE);
@@ -142,118 +143,6 @@ struct Rect
   int X, Y, Width, Height;
 };
 
-inline void to_json(json &j, const Record &record)
-{
-  j = json{{"wins", record.wins}, {"losses", record.losses}};
-}
-
-inline void from_json(const json &j, Record &record)
-{
-  j.at("wins").get_to(record.wins);
-  j.at("losses").get_to(record.losses);
-}
-
-struct PlayerStats
-{
-  int goals = 0;
-  int assists = 0;
-  int shots = 0;
-  int saves = 0;
-  int epicSaves = 0;
-  int clears = 0;
-  int demos = 0;
-  int centerBalls = 0;
-  int hatTricks = 0;
-  int playmakers = 0;
-  int saviors = 0;
-};
-
-inline void to_json(json &j, const PlayerStats &stats)
-{
-  j = json{
-      {"goals", stats.goals},
-      {"assists", stats.assists},
-      {"shots", stats.shots},
-      {"saves", stats.saves},
-      {"epicSaves", stats.epicSaves},
-      {"clears", stats.clears},
-      {"demos", stats.demos},
-      {"centerBalls", stats.centerBalls},
-      {"hatTricks", stats.hatTricks},
-      {"playmakers", stats.playmakers},
-      {"saviors", stats.saviors}};
-}
-
-inline void from_json(const json &j, PlayerStats &stats)
-{
-  j.at("goals").get_to(stats.goals);
-  j.at("assists").get_to(stats.assists);
-  j.at("shots").get_to(stats.shots);
-  j.at("saves").get_to(stats.saves);
-  if (j.contains("epicSaves"))
-    j.at("epicSaves").get_to(stats.epicSaves);
-  j.at("clears").get_to(stats.clears);
-  j.at("demos").get_to(stats.demos);
-  j.at("centerBalls").get_to(stats.centerBalls);
-  j.at("hatTricks").get_to(stats.hatTricks);
-  j.at("playmakers").get_to(stats.playmakers);
-  j.at("saviors").get_to(stats.saviors);
-}
-
-struct PlayerPlaylistData
-{
-  Record withRecord;
-  Record againstRecord;
-  PlayerStats stats;
-};
-
-inline void to_json(json &j, const PlayerPlaylistData &data)
-{
-  j = json{
-      {"withRecord", data.withRecord},
-      {"againstRecord", data.againstRecord},
-      {"stats", data.stats}};
-}
-
-inline void from_json(const json &j, PlayerPlaylistData &data)
-{
-  j.at("withRecord").get_to(data.withRecord);
-  j.at("againstRecord").get_to(data.againstRecord);
-  j.at("stats").get_to(data.stats);
-}
-
-struct PlayerData
-{
-  std::string name;
-  int metCount = 0;
-  float offenseRatio = 0.5f;
-  float defenseRatio = 0.5f;
-  std::string note;
-  std::map<int, PlayerPlaylistData> playlistData;
-};
-
-inline void to_json(json &j, const PlayerData &data)
-{
-  j = json{
-      {"name", data.name},
-      {"metCount", data.metCount},
-      {"offenseRatio", data.offenseRatio},
-      {"defenseRatio", data.defenseRatio},
-      {"note", data.note},
-      {"playlistData", data.playlistData}};
-}
-
-inline void from_json(const json &j, PlayerData &data)
-{
-  j.at("name").get_to(data.name);
-  j.at("metCount").get_to(data.metCount);
-  j.at("offenseRatio").get_to(data.offenseRatio);
-  j.at("defenseRatio").get_to(data.defenseRatio);
-  if (j.contains("note"))
-    j.at("note").get_to(data.note);
-  j.at("playlistData").get_to(data.playlistData);
-}
-
 class DejaVu : public BakkesMod::Plugin::BakkesModPlugin, public BakkesMod::Plugin::PluginWindow
 {
 public:
@@ -353,7 +242,7 @@ private:
   CVar2WayBinding<std::string> quickNoteKeybind = CVar2WayBinding<std::string>(CVAR_KEYBIND_QUICK_NOTE, "None", "Quick note keybind");
 #pragma endregion cvars
 
-  std::map<std::string, PlayerData> allPlayersData;
+  std::unique_ptr<DatabaseManager> dbManager;
   MMRWrapper mmrWrapper;
   bool gameIsOver = false;
   bool isAlreadyAddedToStats = false;
@@ -380,8 +269,6 @@ private:
   void Log(std::string msg);
   void LogError(std::string msg);
   void LogChatbox(std::string msg);
-  void LoadData();
-  void WriteData();
   void Reset();
   void GetAndSetMetMMR(SteamID steamID, int playlist, SteamID idToSet);
   Record GetRecord(UniqueIDWrapper uniqueID, PlaylistID playlist, Side side);
