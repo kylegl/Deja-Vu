@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "DejaVu.h"
+#include "MatchTracker.h"
 #include "bakkesmod/wrappers/GameObject/Stats/StatEventWrapper.h"
 #include "imgui/imgui.h"
 #include <fstream>
@@ -16,7 +16,7 @@ using json = nlohmann::json;
 
 INITIALIZE_EASYLOGGINGPP
 
-BAKKESMOD_PLUGIN(DejaVu, "Deja Vu", PluginVersion, 0)
+BAKKESMOD_PLUGIN(MatchTracker, "Match Tracker", PluginVersion, 0)
 
 // to_string overloads for cvars
 namespace std
@@ -51,13 +51,13 @@ void SetupLogger(std::string logPath, bool enabled)
   el::Loggers::reconfigureLogger("default", defaultConf);
 }
 
-void DejaVu::HookAndLogEvent(std::string eventName)
+void MatchTracker::HookAndLogEvent(std::string eventName)
 {
-  this->gameWrapper->HookEvent(eventName, std::bind(&DejaVu::LogChatbox, this, std::placeholders::_1));
-  this->gameWrapper->HookEvent(eventName, std::bind(&DejaVu::Log, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent(eventName, std::bind(&MatchTracker::LogChatbox, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent(eventName, std::bind(&MatchTracker::Log, this, std::placeholders::_1));
 }
 
-void DejaVu::onLoad()
+void MatchTracker::onLoad()
 {
   this->isAlreadyAddedToStats = false;
 
@@ -213,32 +213,32 @@ void DejaVu::onLoad()
 #pragma endregion register cvars
 
   // I guess this doesn't fire for "you"
-  this->gameWrapper->HookEvent("Function TAGame.GameEvent_TA.EventPlayerAdded", std::bind(&DejaVu::HandlePlayerAdded, this, std::placeholders::_1));
-  this->gameWrapper->HookEvent("Function GameEvent_TA.Countdown.BeginState", std::bind(&DejaVu::HandlePlayerAdded, this, std::placeholders::_1));
-  this->gameWrapper->HookEvent("Function TAGame.Team_TA.EventScoreUpdated", std::bind(&DejaVu::HandlePlayerAdded, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.GameEvent_TA.EventPlayerAdded", std::bind(&MatchTracker::HandlePlayerAdded, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function GameEvent_TA.Countdown.BeginState", std::bind(&MatchTracker::HandlePlayerAdded, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.Team_TA.EventScoreUpdated", std::bind(&MatchTracker::HandlePlayerAdded, this, std::placeholders::_1));
   // TODO: Look for event like "spawning" so that when you join an in progress match it will gather data
 
-  this->gameWrapper->HookEvent("Function TAGame.GameEvent_TA.EventPlayerRemoved", std::bind(&DejaVu::HandlePlayerRemoved, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.GameEvent_TA.EventPlayerRemoved", std::bind(&MatchTracker::HandlePlayerRemoved, this, std::placeholders::_1));
 
   // Don't think this one ever actually works
-  this->gameWrapper->HookEvent("Function TAGame.GameEvent_Soccar_TA.InitGame", bind(&DejaVu::HandleGameStart, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.GameEvent_Soccar_TA.InitGame", bind(&MatchTracker::HandleGameStart, this, std::placeholders::_1));
   // Fires when joining a game
-  this->gameWrapper->HookEvent("Function OnlineGameJoinGame_X.JoiningBase.IsJoiningGame", std::bind(&DejaVu::HandleGameStart, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function OnlineGameJoinGame_X.JoiningBase.IsJoiningGame", std::bind(&MatchTracker::HandleGameStart, this, std::placeholders::_1));
   // Fires when the match is first initialized
-  this->gameWrapper->HookEvent("Function TAGame.GameEvent_Soccar_TA.OnAllTeamsCreated", std::bind(&DejaVu::HandleGameStart, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.GameEvent_Soccar_TA.OnAllTeamsCreated", std::bind(&MatchTracker::HandleGameStart, this, std::placeholders::_1));
 
-  this->gameWrapper->HookEvent("Function TAGame.GameEvent_Soccar_TA.OnMatchWinnerSet", std::bind(&DejaVu::HandleWinnerSet, this, std::placeholders::_1));
-  this->gameWrapper->HookEvent("Function TAGame.GameEvent_TA.OnCanVoteForfeitChanged", std::bind(&DejaVu::HandleForfeitChanged, this, std::placeholders::_1));
-  this->gameWrapper->HookEvent("Function TAGame.GameEvent_Soccar_TA.OnGameTimeUpdated", std::bind(&DejaVu::HandleGameTimeUpdate, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.GameEvent_Soccar_TA.OnMatchWinnerSet", std::bind(&MatchTracker::HandleWinnerSet, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.GameEvent_TA.OnCanVoteForfeitChanged", std::bind(&MatchTracker::HandleForfeitChanged, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.GameEvent_Soccar_TA.OnGameTimeUpdated", std::bind(&MatchTracker::HandleGameTimeUpdate, this, std::placeholders::_1));
 
-  this->gameWrapper->HookEvent("Function TAGame.GFxShell_TA.LeaveMatch", std::bind(&DejaVu::HandleGameLeave, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.GFxShell_TA.LeaveMatch", std::bind(&MatchTracker::HandleGameLeave, this, std::placeholders::_1));
   // Function TAGame.GFxHUD_TA.HandlePenaltyChanged
 
-  this->gameWrapper->HookEvent("Function TAGame.GFxData_GameEvent_TA.OnOpenScoreboard", std::bind(&DejaVu::OpenScoreboard, this, std::placeholders::_1));
-  this->gameWrapper->HookEvent("Function TAGame.GFxData_GameEvent_TA.OnCloseScoreboard", std::bind(&DejaVu::CloseScoreboard, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.GFxData_GameEvent_TA.OnOpenScoreboard", std::bind(&MatchTracker::OpenScoreboard, this, std::placeholders::_1));
+  this->gameWrapper->HookEvent("Function TAGame.GFxData_GameEvent_TA.OnCloseScoreboard", std::bind(&MatchTracker::CloseScoreboard, this, std::placeholders::_1));
 
   this->gameWrapper->UnregisterDrawables();
-  this->gameWrapper->RegisterDrawable(bind(&DejaVu::RenderDrawable, this, std::placeholders::_1));
+  this->gameWrapper->RegisterDrawable(bind(&MatchTracker::RenderDrawable, this, std::placeholders::_1));
 
   gameWrapper->HookEventWithCallerPost<ServerWrapper>("Function TAGame.GFxHUD_TA.HandleStatEvent",
                                                       [this](ServerWrapper caller, void *params, std::string eventName)
@@ -325,7 +325,7 @@ void DejaVu::onLoad()
 #endif
 }
 
-void DejaVu::onUnload()
+void MatchTracker::onUnload()
 {
   LOG(INFO) << "---DEJAVU UNLOADED---";
 
@@ -337,33 +337,33 @@ void DejaVu::onUnload()
     this->cvarManager->executeCommand("togglemenu " + GetMenuName());
 }
 
-void DejaVu::OpenScoreboard(std::string eventName)
+void MatchTracker::OpenScoreboard(std::string eventName)
 {
   this->isScoreboardOpen = true;
 }
 
-void DejaVu::CloseScoreboard(std::string eventName)
+void MatchTracker::CloseScoreboard(std::string eventName)
 {
   this->isScoreboardOpen = false;
 }
 
-void DejaVu::Log(std::string msg)
+void MatchTracker::Log(std::string msg)
 {
   this->cvarManager->log(msg);
 }
 
-void DejaVu::LogError(std::string msg)
+void MatchTracker::LogError(std::string msg)
 {
   this->cvarManager->log("ERROR: " + msg);
 }
 
-void DejaVu::LogChatbox(std::string msg)
+void MatchTracker::LogChatbox(std::string msg)
 {
   this->gameWrapper->LogToChatbox(msg);
   LOG(INFO) << msg;
 }
 
-std::optional<std::string> DejaVu::GetMatchGUID()
+std::optional<std::string> MatchTracker::GetMatchGUID()
 {
   ServerWrapper server = GetCurrentServer();
   if (server.IsNull())
@@ -376,12 +376,12 @@ std::optional<std::string> DejaVu::GetMatchGUID()
   return curMatchGUID;
 }
 
-ServerWrapper DejaVu::GetCurrentServer()
+ServerWrapper MatchTracker::GetCurrentServer()
 {
   return this->gameWrapper->GetCurrentGameState();
 }
 
-PriWrapper DejaVu::GetLocalPlayerPRI()
+PriWrapper MatchTracker::GetLocalPlayerPRI()
 {
   auto server = GetCurrentServer();
   if (server.IsNull())
@@ -392,7 +392,7 @@ PriWrapper DejaVu::GetLocalPlayerPRI()
   return player.GetPRI();
 }
 
-void DejaVu::HandlePlayerAdded(std::string eventName)
+void MatchTracker::HandlePlayerAdded(std::string eventName)
 {
   if (!IsInRealGame())
     return;
@@ -514,7 +514,7 @@ void DejaVu::HandlePlayerAdded(std::string eventName)
   }
 }
 
-void DejaVu::AddPlayerToRenderData(PriWrapper player)
+void MatchTracker::AddPlayerToRenderData(PriWrapper player)
 {
   auto uniqueIDStr = player.GetUniqueIdWrapper().str();
   // If we've already added him to the list, return
@@ -548,7 +548,7 @@ void DejaVu::AddPlayerToRenderData(PriWrapper player)
   std::string playerName = player.GetPlayerName().ToString();
 }
 
-void DejaVu::RemovePlayerFromRenderData(PriWrapper player)
+void MatchTracker::RemovePlayerFromRenderData(PriWrapper player)
 {
   if (player.IsNull())
     return;
@@ -558,7 +558,7 @@ void DejaVu::RemovePlayerFromRenderData(PriWrapper player)
   LOG(INFO) << "Player SteamID: " << steamID;
 }
 
-void DejaVu::HandlePlayerRemoved(std::string eventName)
+void MatchTracker::HandlePlayerRemoved(std::string eventName)
 {
   if (!IsInRealGame())
     return;
@@ -592,7 +592,7 @@ void DejaVu::HandlePlayerRemoved(std::string eventName)
   }
 }
 
-void DejaVu::HandleGameStart(std::string eventName)
+void MatchTracker::HandleGameStart(std::string eventName)
 {
   LOG(INFO) << eventName;
   Reset();
@@ -601,14 +601,14 @@ void DejaVu::HandleGameStart(std::string eventName)
   this->isAlreadyAddedToStats = false;
 }
 
-void DejaVu::HandleWinnerSet(std::string eventName)
+void MatchTracker::HandleWinnerSet(std::string eventName)
 {
   LOG(INFO) << eventName;
 
   GameOver();
 }
 
-void DejaVu::HandleForfeitChanged(std::string eventName)
+void MatchTracker::HandleForfeitChanged(std::string eventName)
 {
   LOG(INFO) << eventName;
 
@@ -625,7 +625,7 @@ void DejaVu::HandleForfeitChanged(std::string eventName)
   GameOver();
 }
 
-void DejaVu::HandleGameTimeUpdate(std::string eventName)
+void MatchTracker::HandleGameTimeUpdate(std::string eventName)
 {
   LOG(INFO) << eventName;
 
@@ -647,7 +647,7 @@ void DejaVu::HandleGameTimeUpdate(std::string eventName)
   }
 }
 
-void DejaVu::GameOver()
+void MatchTracker::GameOver()
 {
   if (!this->isAlreadyAddedToStats)
   {
@@ -658,7 +658,7 @@ void DejaVu::GameOver()
   }
 }
 
-void DejaVu::HandleGameLeave(std::string eventName)
+void MatchTracker::HandleGameLeave(std::string eventName)
 {
   LOG(INFO) << eventName;
   Reset();
@@ -666,7 +666,7 @@ void DejaVu::HandleGameLeave(std::string eventName)
   this->isAlreadyAddedToStats = false;
 }
 
-void DejaVu::OnStatEvent(ServerWrapper caller, void *params, std::string eventName)
+void MatchTracker::OnStatEvent(ServerWrapper caller, void *params, std::string eventName)
 {
   if (params == nullptr)
   {
@@ -745,7 +745,7 @@ void DejaVu::OnStatEvent(ServerWrapper caller, void *params, std::string eventNa
   Log(playerPRI.GetPlayerName().ToString() + " got stat: " + statEvent.GetStatName());
 }
 
-void DejaVu::Reset()
+void MatchTracker::Reset()
 {
   this->gameIsOver = false;
   this->currentMatchPRIs.clear();
@@ -753,7 +753,7 @@ void DejaVu::Reset()
   // this->matchesMetLists.clear();
 }
 
-void DejaVu::GetAndSetMetMMR(SteamID steamID, int playlist, SteamID idToSet)
+void MatchTracker::GetAndSetMetMMR(SteamID steamID, int playlist, SteamID idToSet)
 {
   this->gameWrapper->SetTimeout([this, steamID, playlist, idToSet](GameWrapper *gameWrapper)
                                 {
@@ -779,12 +779,12 @@ void DejaVu::GetAndSetMetMMR(SteamID steamID, int playlist, SteamID idToSet)
                                 5);
 }
 
-Record DejaVu::GetRecord(UniqueIDWrapper uniqueID, PlaylistID playlist, Side side)
+Record MatchTracker::GetRecord(UniqueIDWrapper uniqueID, PlaylistID playlist, Side side)
 {
   return GetRecord(uniqueID.str(), playlist, side);
 }
 
-Record DejaVu::GetRecord(std::string uniqueID, PlaylistID playlist, Side side)
+Record MatchTracker::GetRecord(std::string uniqueID, PlaylistID playlist, Side side)
 {
   PlayerData playerData;
   if (!this->dbManager->get_player(uniqueID, playerData))
@@ -826,7 +826,7 @@ Record DejaVu::GetRecord(std::string uniqueID, PlaylistID playlist, Side side)
   return {0, 0};
 }
 
-void DejaVu::SetRecord()
+void MatchTracker::SetRecord()
 {
   if (!IsInRealGame())
     return;
@@ -915,21 +915,21 @@ void DejaVu::SetRecord()
   }
 }
 
-bool DejaVu::IsInRealGame()
+bool MatchTracker::IsInRealGame()
 {
   return this->gameWrapper->IsInOnlineGame() && !this->gameWrapper->IsInReplay() && !this->gameWrapper->IsInFreeplay();
 }
 
 static float MetCountColumnWidth;
 static float RecordColumnWidth;
-void DejaVu::CleanUpJson()
+void MatchTracker::CleanUpJson()
 {
   // This function is now dangerous as it would delete players with only one game.
   // I will disable it for now.
   this->cvarManager->log("CleanUpJson is disabled for now.");
 }
 
-void DejaVu::CalculatePlayerRatios(PlayerData &player)
+void MatchTracker::CalculatePlayerRatios(PlayerData &player)
 {
   std::vector<PlaylistRecord> records;
   this->dbManager->get_playlist_records_for_player(player.id, records);
@@ -966,11 +966,11 @@ void DejaVu::CalculatePlayerRatios(PlayerData &player)
   }
 }
 
-void DejaVu::GenerateSettingsFile()
+void MatchTracker::GenerateSettingsFile()
 {
   this->cvarManager->executeCommand("writeconfig");
 }
-void DejaVu::Render()
+void MatchTracker::Render()
 {
   ImGui::Text("Deja Vu Plugin Settings");
 
@@ -980,7 +980,7 @@ void DejaVu::Render()
   }
 }
 
-void DejaVu::ExportData()
+void MatchTracker::ExportData()
 {
   std::vector<PlayerWithRecords> players_with_records;
   if (!this->dbManager->get_all_players_with_records(players_with_records))
@@ -1039,7 +1039,7 @@ void DejaVu::ExportData()
   }
 }
 
-void DejaVu::RenderPlaystyleBar(CanvasWrapper canvas, float offenseRatio, Vector2 pos, Vector2 size)
+void MatchTracker::RenderPlaystyleBar(CanvasWrapper canvas, float offenseRatio, Vector2 pos, Vector2 size)
 {
   LinearColor offenseColor = {255, 165, 0, 255};
   LinearColor defenseColor = {0, 0, 255, 255};
@@ -1068,7 +1068,7 @@ void DejaVu::RenderPlaystyleBar(CanvasWrapper canvas, float offenseRatio, Vector
   canvas.DrawString(text);
 }
 
-void DejaVu::RenderDrawable(CanvasWrapper canvas)
+void MatchTracker::RenderDrawable(CanvasWrapper canvas)
 {
   if (!Canvas::IsContextSet())
   {

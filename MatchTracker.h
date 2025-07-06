@@ -143,10 +143,10 @@ struct Rect
   int X, Y, Width, Height;
 };
 
-class DejaVu : public BakkesMod::Plugin::BakkesModPlugin, public BakkesMod::Plugin::PluginWindow
+class MatchTracker : public BakkesMod::Plugin::BakkesModPlugin, public BakkesMod::Plugin::PluginWindow
 {
 public:
-  DejaVu() : mmrWrapper(MMRWrapper(NULL)) {}
+  MatchTracker() : mmrWrapper(MMRWrapper(NULL)) {}
 
   virtual void onLoad() override;
   virtual void onUnload() override;
@@ -184,7 +184,7 @@ public:
 private:
   bool isWindowOpen = false;
   bool shouldBlockInput = false;
-  std::string menuTitle = "Deja Vu";
+  std::string menuTitle = "Match Tracker";
   bool openQuickNote = false;
   std::string playersNoteToEdit = "";
 
@@ -258,7 +258,7 @@ private:
   inline static auto mainFile = "player_counter.json";
   inline static auto tmpFile = "player_counter.json.tmp";
   inline static auto bakFile = "player_counter.json.bak";
-  inline static auto logFile = "dejavu.log";
+  inline static auto logFile = "match_tracker.log";
 
   inline static std::filesystem::path dataDir;
   inline static std::filesystem::path mainPath;
